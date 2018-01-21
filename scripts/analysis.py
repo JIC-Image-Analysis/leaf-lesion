@@ -5,15 +5,40 @@ import logging
 import argparse
 import errno
 
+import skimage.morphology
+
 from dtoolcore import DataSet
 
-from jicbioimage.core.image import Image
+from jicbioimage.core.io import AutoName, AutoWrite, DataManager, FileBackend
 from jicbioimage.core.transform import transformation
-from jicbioimage.core.io import AutoName, AutoWrite
+
+from jicbioimage.transform import (
+    dilate_binary,
+    erode_binary,
+    remove_small_objects,
+)
+
+from jicbioimage.segment import connected_components
+
+from jicbioimage.core.util.array import normalise
+from jicbioimage.core.util.color import pretty_color_from_identifier
+from jicbioimage.illustrate import AnnotatedImage
 
 __version__ = "0.1.0"
 
 AutoName.prefix_format = "{:03d}_"
+
+
+def get_microscopy_collection(input_file):
+    """Return microscopy collection from input file."""
+    data_dir = "output"
+    if not os.path.isdir(data_dir):
+        os.mkdir(data_dir)
+    backend_dir = os.path.join(data_dir, '.backend')
+    file_backend = FileBackend(backend_dir)
+    data_manager = DataManager(file_backend)
+    microscopy_collection = data_manager.load(input_file)
+    return microscopy_collection
 
 
 def safe_mkdir(directory):
@@ -40,26 +65,83 @@ def identity(image):
     return image
 
 
+@transformation
+def threshold_abs(image, cutoff):
+    return image > cutoff
+
+
+@transformation
+def white_tophat(image, radius):
+    selem = skimage.morphology.disk(radius)
+    return skimage.morphology.white_tophat(image, selem)
+
+
+def analyse_image(image):
+    raw_canvas = AnnotatedImage.from_grayscale(image)
+    grayscale = normalise(image) * 255
+    high_contrast_canvas = AnnotatedImage.from_grayscale(grayscale)
+
+    image = threshold_abs(image, 20)
+
+    image = erode_binary(image)
+    image = remove_small_objects(image, 5)
+
+    salem = skimage.morphology.disk(2)
+    image = dilate_binary(image, salem)
+
+    segmentation = connected_components(image, background=0)
+    for i in segmentation.identifiers:
+        color = pretty_color_from_identifier(i)
+
+        region = segmentation.region_by_identifier(i)
+        convex_hull = region.convex_hull
+        outline = convex_hull.inner.border.dilate()
+
+        raw_canvas.mask_region(outline, color=color)
+        high_contrast_canvas.mask_region(outline, color=color)
+
+    return raw_canvas, high_contrast_canvas
+
+
 def analyse_file(fpath, output_directory):
     """Analyse a single file."""
     logging.info("Analysing file: {}".format(fpath))
 
     AutoName.directory = output_directory
 
-    image = Image.from_file(fpath)
-    image = identity(image)
+    microscopy_collection = get_microscopy_collection(fpath)
+    for s in microscopy_collection.series:
+        image = microscopy_collection.image(s)
+        raw_ann, high_contrast_ann = analyse_image(image)
+
+        raw_file_name = os.path.join(
+            output_directory,
+            "series_{:03d}_raw_annotation.png".format(s)
+        )
+        with open(raw_file_name, "wb") as fh:
+            fh.write(raw_ann.png())
+
+        high_contrast_file_name = os.path.join(
+            output_directory,
+            "series_{:03d}_high_contrast_annotation.png".format(s)
+        )
+        with open(high_contrast_file_name, "wb") as fh:
+            fh.write(high_contrast_ann.png())
 
 
 def analyse_dataset(dataset_dir, output_dir):
     """Analyse all the files in the dataset."""
-    dataset = DataSet.from_path(dataset_dir)
+    dataset = DataSet.from_uri(dataset_dir)
     logging.info("Analysing items in dataset: {}".format(dataset.name))
 
     for i in dataset.identifiers:
-        data_item_abspath = dataset.abspath_from_identifier(i)
-        item_info = dataset.item_from_identifier(i)
+        data_item_abspath = dataset.item_content_abspath(i)
+        item_info = dataset.item_properties(i)
 
-        specific_output_dir = item_output_path(output_dir, item_info["path"])
+        specific_output_dir = item_output_path(
+            output_dir,
+            item_info["relpath"]
+        )
         analyse_file(data_item_abspath, specific_output_dir)
 
 
