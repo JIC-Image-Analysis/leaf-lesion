@@ -16,6 +16,7 @@ from jicbioimage.transform import (
     dilate_binary,
     erode_binary,
     remove_small_objects,
+    smooth_gaussian,
 )
 
 from jicbioimage.segment import connected_components
@@ -81,6 +82,7 @@ def analyse_image(image):
     grayscale = normalise(image) * 255
     high_contrast_canvas = AnnotatedImage.from_grayscale(grayscale)
 
+    image = smooth_gaussian(image.astype(float), 5)
     image = threshold_abs(image, 20)
 
     image = erode_binary(image)
