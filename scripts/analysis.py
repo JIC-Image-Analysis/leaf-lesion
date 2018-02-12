@@ -83,7 +83,7 @@ def analyse_image(image):
     canvas = AnnotatedImage.from_grayscale(image)
 
     image = smooth_gaussian(image.astype(float), 5)
-    image = threshold_abs(image, 20)
+    image = threshold_abs(image, 30)
 
     image = erode_binary(image)
     image = remove_small_objects(image, 5)
