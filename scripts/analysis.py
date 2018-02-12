@@ -78,9 +78,9 @@ def white_tophat(image, radius):
 
 
 def analyse_image(image):
-    raw_canvas = AnnotatedImage.from_grayscale(image)
-    grayscale = normalise(image) * 255
-    high_contrast_canvas = AnnotatedImage.from_grayscale(grayscale)
+    image = normalise(image) * 255
+
+    canvas = AnnotatedImage.from_grayscale(image)
 
     image = smooth_gaussian(image.astype(float), 5)
     image = threshold_abs(image, 20)
@@ -99,10 +99,9 @@ def analyse_image(image):
         convex_hull = region.convex_hull
         outline = convex_hull.inner.border.dilate()
 
-        raw_canvas.mask_region(outline, color=color)
-        high_contrast_canvas.mask_region(outline, color=color)
+        canvas.mask_region(outline, color=color)
 
-    return raw_canvas, high_contrast_canvas
+    return canvas
 
 
 def analyse_file(fpath, output_directory):
@@ -114,21 +113,15 @@ def analyse_file(fpath, output_directory):
     microscopy_collection = get_microscopy_collection(fpath)
     for s in microscopy_collection.series:
         image = microscopy_collection.image(s)
-        raw_ann, high_contrast_ann = analyse_image(image)
+        annotation = analyse_image(image)
 
-        raw_file_name = os.path.join(
+        annotation_file_name = os.path.join(
             output_directory,
-            "series_{:03d}_raw_annotation.png".format(s)
+            "series_{:03d}_annotation.png".format(s)
         )
-        with open(raw_file_name, "wb") as fh:
-            fh.write(raw_ann.png())
-
-        high_contrast_file_name = os.path.join(
-            output_directory,
-            "series_{:03d}_high_contrast_annotation.png".format(s)
-        )
-        with open(high_contrast_file_name, "wb") as fh:
-            fh.write(high_contrast_ann.png())
+        with open(annotation_file_name, "wb") as fh:
+            fh.write(annotation.png())
+        break
 
 
 def analyse_dataset(dataset_dir, output_dir):
