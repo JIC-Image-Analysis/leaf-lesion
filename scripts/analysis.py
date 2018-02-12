@@ -25,7 +25,7 @@ from jicbioimage.core.util.array import normalise
 from jicbioimage.core.util.color import pretty_color_from_identifier
 from jicbioimage.illustrate import AnnotatedImage
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 AutoName.prefix_format = "{:03d}_"
 
@@ -121,7 +121,6 @@ def analyse_file(fpath, output_directory):
         )
         with open(annotation_file_name, "wb") as fh:
             fh.write(annotation.png())
-        break
 
 
 def analyse_dataset(dataset_dir, output_dir):
